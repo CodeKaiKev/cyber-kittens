@@ -1,7 +1,8 @@
+require("dotnev").config();
 const express = require('express');
 const app = express();
 const { User } = require('./db');
-
+const jwt = require("jsonwebtoken");
 app.use(express.json());
 app.use(express.urlencoded({extended:true}));
 
@@ -21,7 +22,36 @@ app.get('/', async (req, res, next) => {
 
 // Verifies token with jwt.verify and sets req.user
 // TODO - Create authentication middleware
+app.use((req, res, next) => {
+  const header = req.get("Authorization");
 
+  if(!header) {
+    console.error("Missing authorization header");
+    res.set("WWW-Authenticate", "Bearer");
+    res.sendStatus(401);
+    return;
+  }
+
+  const [type, token] = header.split(" ");
+
+  if(type.toLowerCase() !== "bearer" || !token) {
+    console.error("Invalid token.");
+    res.sendStatus(401);
+    return;
+  }
+
+  try {
+    const user = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = user;
+    next();
+  }catch(err) {
+
+  }
+});
+
+app.get("/hello", (req, res) => {
+  res.send("<h1>Hello</h1>");
+});
 // POST /register
 // OPTIONAL - takes req.body of {username, password} and creates a new user with the hashed password
 
@@ -30,6 +60,31 @@ app.get('/', async (req, res, next) => {
 
 // GET /kittens/:id
 // TODO - takes an id and returns the cat with that id
+app.get("/kittens/:id", async (req, res, next) => { 
+  const { id } = req.params;
+
+  try {
+    const kitten = await Kitten.findByPk(req.params.id);
+    if(!kitten) {
+      res.sendStatus(404);
+      return;
+    }
+
+    if(kitten.ownerId !== req.body.ownerId) {
+        res.sendStatus(403);
+        return;
+    }
+
+    res.send({
+      name: kitten.name,
+      age: kitten.age,
+      color: kitten.color,
+    });
+
+  } catch (err) { 
+    next(err);
+  }
+});
 
 // POST /kittens
 // TODO - takes req.body of {name, age, color} and creates a new cat with the given name, age, and color
